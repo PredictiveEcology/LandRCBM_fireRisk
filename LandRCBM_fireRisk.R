@@ -1,9 +1,4 @@
-## Everything in this file and any files in the R directory are sourced during `simInit()`;
-## all functions and objects are put into the `simList`.
-## To use objects, use `sim$xxx` (they are globally available to all modules).
-## Functions can be used inside any function that was sourced in this module;
-## they are namespaced to the module, just like functions in R packages.
-## If exact location is required, functions will be: `sim$.mods$<moduleName>$FunctionName`.
+
 defineModule(sim, list(
   name = "LandRCBM_fireRisk",
   description = "",
@@ -28,7 +23,6 @@ defineModule(sim, list(
                     "Should caching of events or module be used?")
   ),
   inputObjects = bindrows(
-    #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
     expectsInput("burnProbability", "SpatRaster", sourceURL = NA,
                  desc = paste("Per-pixel burn probability for this year, from either",
                               "`fireSense_burnProbability` or `scfm_burnProbability`.")),
@@ -39,7 +33,6 @@ defineModule(sim, list(
     expectsInput("rasterToMatch", "SpatRaster", desc = "Raster template used to rasterize the fire susceptibility output.")
   ),
   outputObjects = bindrows(
-    #createsOutput("objectName", "objectClass", "output object description", ...),
     createsOutput(objectName = "fireSusceptibility", objectClass = "SpatRaster", desc = "Raster of carbon emitted to the atmosphere if burned."),
     createsOutput(objectName = "fireRisk", objectClass = "SpatRaster", desc = "Raster of fire risk to carbon.")
   )
@@ -50,7 +43,6 @@ doEvent.LandRCBM_fireRisk = function(sim, eventTime, eventType) {
     eventType,
     init = {
 
-      # do stuff for this event
       # eventPriority must run after scfm_burnProbability's "estimate" event (priority 7.51)
       # so burnProbability is available, AND after CBM_core's "annual_carbonDynamics" event
       # (priority 8.5): LandRCBM_split3pools's "annualIncrements" event (priority 7, which runs
@@ -107,27 +99,7 @@ calculateFireSusceptibility <- function(cbm_vars, cTransfers, rasterToMatch){
 }
 
 .inputObjects <- function(sim) {
-  # Any code written here will be run during the simInit for the purpose of creating
-  # any objects required by this module and identified in the inputObjects element of defineModule.
-  # This is useful if there is something required before simulation to produce the module
-  # object dependencies, including such things as downloading default datasets, e.g.,
-  # downloadData("LCC2005", modulePath(sim)).
-  # Nothing should be created here that does not create a named object in inputObjects.
-  # Any other initiation procedures should be put in "init" eventType of the doEvent function.
-  # Note: the module developer can check if an object is 'suppliedElsewhere' to
-  # selectively skip unnecessary steps because the user has provided those inputObjects in the
-  # simInit call, or another module will supply or has supplied it. e.g.,
-  # if (!suppliedElsewhere('defaultColor', sim)) {
-  #   sim$map <- Cache(prepInputs, extractURL('map')) # download, extract, load file from url in sourceURL
-  # }
 
-  #cacheTags <- c(currentModule(sim), "function:.inputObjects") ## uncomment this if Cache is being used
-  dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
-  message(currentModule(sim), ": using dataPath '", dPath, "'.")
-
-  # ! ----- EDIT BELOW ----- ! #
-
-  # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
 }
 
