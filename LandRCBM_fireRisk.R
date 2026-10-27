@@ -26,18 +26,16 @@ defineModule(sim, list(
                     "Should caching of events or module be used?")
   ),
   inputObjects = bindrows(
-    expectsInput("burnProbability", "SpatRaster", sourceURL = NA,
-                 desc = paste("Per-pixel burn probability for this year, from either",
-                              "`fireSense_burnProbability` or `scfm_burnProbability`.")),
-    expectsInput("cbm_vars", "list", desc = paste("List of 5 data tables defining active cohorts in the current year:",
-                                                  "key, parameters, pools, flux, and state.",
-                                                  "This is created initially during the spinup and updated each year.")),
-    expectsInput("cTransfers", "data.table", desc = "Carbon transfer values table with associated disturbance names and IDs."),
-    expectsInput("rasterToMatch", "SpatRaster", desc = "Raster template used to rasterize the fire susceptibility output.")
+    expectsInput("burnProbability", objectClass = "SpatRaster", desc = "Pixel burn probability for the current year"),
+    expectsInput("cohortDT",        objectClass = "data.table", desc = "Table of cohort attributes and carbon pools"),
+    expectsInput("standDT",         objectClass = "data.table", desc = "Table of pixel attributes"),
+    expectsInput("cbm_defaults_db", objectClass = "character",  desc = "Path to CBM defaults SQLite database")
   ),
   outputObjects = bindrows(
-    createsOutput(objectName = "fireSusceptibility", objectClass = "SpatRaster", desc = "Raster of carbon emitted to the atmosphere if burned."),
-    createsOutput(objectName = "fireRisk", objectClass = "SpatRaster", desc = "Raster of fire risk to carbon.")
+    createsOutput("fireSusceptibility", objectClass = "SpatRaster",
+                  desc = "Raster of carbon emitted to the atmosphere if burned (t/ha)"),
+    createsOutput("fireRisk", objectClass = "SpatRaster",
+                  desc = "Raster of fire risk to carbon")
   )
 ))
 
@@ -57,10 +55,14 @@ doEvent.LandRCBM_fireRisk = function(sim, eventTime, eventType) {
     },
     calculateFireRisk = {
 
-      terra::compareGeom(sim$rasterToMatch, sim$burnProbability, stopOnError = TRUE)
+      # calculate fire susceptibility
+      pixelEmissions <- calculateFireSusceptibility(sim$standDT, sim$cohortDT, sim$cbm_defaults_db)
 
-      sim$fireSusceptibility <- calculateFireSusceptibility(sim$cbm_vars, sim$cTransfers, sim$rasterToMatch)
+      # rasterize fire susceptibility
+      sim$fireSusceptibility <- terra::rast(sim$burnProbability, names = "fireSusceptibility")
+      terra::set.values(sim$fireSusceptibility, cells = pixelEmissions$pixelIndex, values = pixelEmissions$emissions)
 
+      # calculate fire risk
       sim$fireRisk <- sim$burnProbability * sim$fireSusceptibility
 
       # schedule future event(s)
@@ -73,32 +75,51 @@ doEvent.LandRCBM_fireRisk = function(sim, eventTime, eventType) {
   return(invisible(sim))
 }
 
-calculateFireSusceptibility <- function(cbm_vars, cTransfers, rasterToMatch){
-  # keep only rows needed in cTransfers: spatial units and transfer to the atmosphere
-  spuids <- unique(cbm_vars$state$spatial_unit_id)
-  transfers <- cTransfers[cTransfers$disturbance_type_id == 1 & cTransfers$spatial_unit_id %in% spuids, ]
-  transfers <- transfers[transfers$sink_pool %in% c("CO2", "CO", "CH4"),]
+# Calculate pixel emissions if a fire were to occur
+calculateFireSusceptibility <- function(standDT, cohortDT, cbm_defaults_db){
 
-  # apply each transfer to the cohort groups
-  cohortGroupConsequences <- rep(0L, nrow(cbm_vars$pools))
+  emissionsByPool <- fireEmissionProportions(cbm_defaults_db)
 
-  for (i in seq_len(nrow(transfers))){
-    t <- transfers[i,]
+  pools <- intersect(names(emissionsByPool)[-1], gsub("^pools\\.", "", names(cohortDT)))
 
-    cohortGroups <- (cbm_vars$state$sw_hw == (t$sw_hw == "hw")) & cbm_vars$state$spatial_unit_id == t$spatial_unit_id
+  cohortPools <- cohortDT[, .SD, .SDcols = c("pixelIndex", paste0("pools.", pools))]
+  cohortPools[standDT, spatial_unit_id := spatial_unit_id, on = "pixelIndex"]
 
-    cohortGroupConsequences <- cohortGroupConsequences + (cbm_vars$pools[, get(t$source_pool)] * t$proportion * cohortGroups)
-  }
+  cohortPools[, emissions := rowSums(
+    cohortPools[, .SD, .SDcols = paste0("pools.", pools)] *
+      emissionsByPool[match(cohortPools$spatial_unit_id, emissionsByPool$spatial_unit_id), .SD, .SDcols = pools]
+  )]
 
-  # convert the cohort group consequences to pixels
-  pixelConsequences <- data.table(pixelIndex = cbm_vars$key$pixelIndex, consequence = cohortGroupConsequences[cbm_vars$key$row_idx])
-  pixelConsequences <- pixelConsequences[ , .(consequence = sum(consequence)), by = "pixelIndex"]
+  cohortPools[ , .(emissions = sum(emissions)), by = "pixelIndex"]
+}
 
-  # rasterize
-  fireSusceptibility <- rast(rasterToMatch, names = "fireSusceptibility", vals = NA)
-  fireSusceptibility[pixelConsequences$pixelIndex] <- pixelConsequences$consequence
+# Get a summary of pool emission proportions for each spatial unit in the event of a wildfire
+fireEmissionProportions <- function(cbm_defaults_db){
 
-  return(fireSusceptibility)
+  cbmDBcon <- RSQLite::dbConnect(RSQLite::dbDriver("SQLite"), cbm_defaults_db, flags = RSQLite::SQLITE_RO)
+  on.exit(RSQLite::dbDisconnect(cbmDBcon))
+  cbmDBtables <- c("disturbance_type_tr", "disturbance_matrix_association", "disturbance_matrix_value", "pool")
+  cbmDBtables <- setNames(cbmDBtables, cbmDBtables) |>
+    lapply(RSQLite::dbReadTable, con = cbmDBcon) |>
+    lapply(data.table::as.data.table)
+
+  distTypeID <- cbmDBtables$disturbance_type_tr[name == "Wildfire", disturbance_type_id]
+  distValues <- merge(
+    cbmDBtables$disturbance_matrix_association[disturbance_type_id == distTypeID],
+    cbmDBtables$disturbance_matrix_value,
+    by = "disturbance_matrix_id")
+
+  fireEmissions <- distValues[
+    sink_pool_id %in% cbmDBtables$pool[code %in% c("CO2", "CO", "CH4"), id],
+    .(proportion = sum(proportion)),
+    by = c("spatial_unit_id", "source_pool_id")]
+
+  fireEmissions[cbmDBtables$pool[, .(source_pool_id = id, code)], source_pool := code, on = "source_pool_id"]
+  fireEmissions <- data.table::dcast(fireEmissions, spatial_unit_id ~ source_pool, value.var = "proportion")
+  fireEmissions[is.na(fireEmissions)] <- 0
+
+  return(fireEmissions)
+
 }
 
 .inputObjects <- function(sim) {

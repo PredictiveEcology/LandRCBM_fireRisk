@@ -22,22 +22,31 @@ test_that("Module: LandRCBM_fireRisk", {
     require = c("data.table", "terra"),
 
     # Carbon transfer proportions
-    cTransfers = readRDS(file.path(projectPath, "tests/testthat/testdata", "cTransfers.rds")),
+    cbm_defaults_db = {
+      dbURL <- "https://raw.githubusercontent.com/cat-cfs/libcbm_py/main/libcbm/resources/cbm_defaults_db/cbm_defaults_v1.2.9300.391.db"
+      destfile <- file.path(paths$inputPath, basename(dbURL))
+      if (!file.exists(destfile)) download.file(dbURL, destfile, mode = "wb", quiet = TRUE)
+      destfile
+    },
 
     # 2 pixels with a burn probability of 50%
     # 1 SW, 1 HW
-    burnProbability = terra::rast(matrix(c(0.5, 0.5), ncol = 2, nrow = 1), crs = "local"),
-    rasterToMatch = burnProbability,
-
     # Set all pool values to 1
-    cbm_vars = {
+    burnProbability = terra::rast(matrix(c(0.5, 0.5), ncol = 2, nrow = 1), crs = "local"),
 
-      pools <- unique(c(cTransfers$source_pool, cTransfers$sink_pool))
-
-      list(
-        key   = data.table::data.table(pixelIndex = 1:2, row_idx = 1:2),
-        state = data.table::data.table(row_idx = 1:2, spatial_unit_id = 27, sw_hw = c(0, 1)),
-        pools = data.table::data.table(row_idx = 1:2)[, c(pools) := 1]
+    standDT = data.table::data.table(pixelIndex = 1:2, spatial_unit_id = 27),
+    cohortDT = {
+      pools <- list(
+        sw    = c("SoftwoodMerch", "SoftwoodFoliage", "SoftwoodOther",
+                  "SoftwoodCoarseRoots", "SoftwoodFineRoots", "SoftwoodStemSnag", "SoftwoodBranchSnag"),
+        hw    = c("HardwoodMerch", "HardwoodFoliage", "HardwoodOther",
+                  "HardwoodCoarseRoots", "HardwoodFineRoots", "HardwoodStemSnag", "HardwoodBranchSnag"),
+        other = c("AboveGroundVeryFastSoil", "BelowGroundVeryFastSoil", "AboveGroundFastSoil", "BelowGroundFastSoil",
+                  "MediumSoil", "AboveGroundSlowSoil", "BelowGroundSlowSoil", "CO2", "CH4", "CO", "NO2", "Products")
+      ) |> lapply(function(x) paste0("pools.", x))
+      rbind(
+        data.table::data.table(pixelIndex = 1)[, c(pools$other) := 1][, c(pools$sw) := 1][, c(pools$hw) := 0],
+        data.table::data.table(pixelIndex = 2)[, c(pools$other) := 1][, c(pools$sw) := 0][, c(pools$hw) := 1]
       )
     }
   )
