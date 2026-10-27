@@ -24,10 +24,6 @@ defineModule(sim, list(
                     desc = paste("Years between fire-risk estimates. `NA` estimates once, at",
                                  "`.runInitialTime`. Each estimate uses that year's ignition/spread",
                                  "covariates and model predictions, held fixed across all `nIterations` draws.")),                
-    defineParameter(".saveInitialTime", "numeric", NA, NA, NA,
-                    "Describes the simulation time at which the first save event should occur."),
-    defineParameter(".saveInterval", "numeric", NA, NA, NA,
-                    "This describes the simulation time interval between save events."),
     defineParameter(".studyAreaName", "character", NA, NA, NA,
                     "Human-readable name for the study area used - e.g., a hash of the study",
                           "area obtained using `reproducible::studyAreaName()`"),
@@ -69,18 +65,6 @@ doEvent.LandRCBM_fireRisk = function(sim, eventTime, eventType) {
       # those columns are only restored once CBM_core runs during annual_carbonDynamics. 
       sim <- scheduleEvent(sim, eventTime = P(sim)$.runInitialTime, "LandRCBM_fireRisk", "calculateFireRisk", eventPriority = 8.6)
 
-      # schedule future event(s)
-      sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "LandRCBM_fireRisk", "save")
-    },
-    save = {
-      # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-      saveFiles(sim)
-
-      # schedule future event(s)
-      sim <- scheduleEvent(sim, time(sim) + P(sim)$.saveInterval, "LandRCBM_fireRisk", "save")
-
-      # ! ----- STOP EDITING ----- ! #
     },
     calculateFireRisk = {
       
