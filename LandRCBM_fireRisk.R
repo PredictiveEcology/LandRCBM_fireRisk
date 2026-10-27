@@ -24,9 +24,6 @@ defineModule(sim, list(
                     desc = paste("Years between fire-risk estimates. `NA` estimates once, at",
                                  "`.runInitialTime`. Each estimate uses that year's ignition/spread",
                                  "covariates and model predictions, held fixed across all `nIterations` draws.")),
-    ## .seed is optional: `list('init' = 123)` will `set.seed(123)` for the `init` event only.
-    defineParameter(".seed", "list", list(), NA, NA,
-                    "Named list of seeds to use for each event (names)."),
     defineParameter(".useCache", "logical", FALSE, NA, NA,
                     "Should caching of events or module be used?")
   ),
