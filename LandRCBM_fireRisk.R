@@ -15,15 +15,9 @@ defineModule(sim, list(
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("NEWS.md", "README.md", "LandRCBM_fireRisk.Rmd"),
-  reqdPkgs = list("PredictiveEcology/SpaDES.core@development (>= 3.1.2.9005)", "ggplot2", "terra", "data.table"),
+  reqdPkgs = list("PredictiveEcology/SpaDES.core@development (>= 3.1.2.9005)", "terra", "data.table"),
   loadOrder = list(after = c("fireSense_burnProbability", "scfm_burnProbability")),
   parameters = bindrows(
-    defineParameter(".plots", "character", "screen", NA, NA,
-                    "Used by Plots function, which can be optionally used here"),
-    defineParameter(".plotInitialTime", "numeric", start(sim), NA, NA,
-                    "Describes the simulation time at which the first plot event should occur."),
-    defineParameter(".plotInterval", "numeric", NA, NA, NA,
-                    "Describes the simulation time interval between plot events."),
     defineParameter(".runInitialTime", "numeric", start(sim), NA, NA,
                     "Describes the simulation time at which the first fire-risk estimate should occur."),
     defineParameter(".runInterval", "numeric", default = 1, NA, NA,
@@ -74,22 +68,9 @@ doEvent.LandRCBM_fireRisk = function(sim, eventTime, eventType) {
       # area, and sw_hw from cbm_vars$state when it rebuilds cohort groups for the new year;
       # those columns are only restored once CBM_core runs during annual_carbonDynamics. 
       sim <- scheduleEvent(sim, eventTime = P(sim)$.runInitialTime, "LandRCBM_fireRisk", "calculateFireRisk", eventPriority = 8.6)
-      
+
       # schedule future event(s)
-      sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "LandRCBM_fireRisk", "plot")
       sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "LandRCBM_fireRisk", "save")
-    },
-    plot = {
-      # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      plotFun(sim) # example of a plotting function
-      # schedule future event(s)
-
-      # e.g.,
-      sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "LandRCBM_fireRisk", "plot")
-
-      # ! ----- STOP EDITING ----- ! #
     },
     save = {
       # ! ----- EDIT BELOW ----- ! #
@@ -143,19 +124,9 @@ calculateFireSusceptibility <- function(cbm_vars, cTransfers, rasterToMatch){
   # rasterize
   fireSusceptibility <- rast(rasterToMatch, names = "fireSusceptibility", vals = NA)
   fireSusceptibility[pixelConsequences$pixelIndex] <- pixelConsequences$consequence
-  
+
   return(fireSusceptibility)
 }
-
-### template for plot events
-plotFun <- function(sim) {
-
-  sampleData <- data.frame("TheSample" = sample(1:10, replace = TRUE))
-  Plots(sampleData, fn = ggplotFn)
-
-  return(invisible(sim))
-}
-
 
 .inputObjects <- function(sim) {
   # Any code written here will be run during the simInit for the purpose of creating
@@ -182,7 +153,3 @@ plotFun <- function(sim) {
   return(invisible(sim))
 }
 
-ggplotFn <- function(data, ...) {
-  ggplot2::ggplot(data, ggplot2::aes(TheSample)) +
-    ggplot2::geom_histogram(...)
-}

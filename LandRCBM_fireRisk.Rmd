@@ -89,16 +89,12 @@ knitr::kable(df_params, caption = "List of (ref:LandRCBM-fireRisk) parameters an
 ### Events
 
 - `init`: schedules the first `calculateFireRisk` at `start(sim)`, and the first
-  `plot` and `save` events.
+  `save` event.
 - `calculateFireRisk`: computes `sim$fireSusceptibility` from `sim$cbm_vars`
   and `sim$cTransfers`, and sets
   `sim$fireRisk <- sim$burnProbability * fireSusceptibility`.
   Reschedules itself annually until `end(sim)`.
-- `plot`, `save`: template events; see source for current behaviour.
-
-### Plotting
-
-Write what is plotted.
+- `save`: template events; see source for current behaviour.
 
 ### Saving
 
