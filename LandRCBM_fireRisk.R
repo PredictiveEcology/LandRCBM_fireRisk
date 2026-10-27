@@ -8,7 +8,10 @@ defineModule(sim, list(
   name = "LandRCBM_fireRisk",
   description = "",
   keywords = "",
-  authors = structure(list(list(given = "Dominique", family = "Caron", role = c("aut", "cre"), email = "dominique.caron@nrcan-rncan.gc.ca")), class = "person"),
+  authors = c(
+    person("Dominique", "Caron",  email = "dominique.caron@nrcan-rncan.gc.ca", role = c("aut", "cre")),
+    person("Susan",     "Murray", email = "murray.e.susan@gmail.com",          role = c("ctb"))
+  ),
   childModules = character(0),
   version = list(LandRCBM_fireRisk = "0.0.0.9000"),
   timeframe = as.POSIXlt(c(NA, NA)),
